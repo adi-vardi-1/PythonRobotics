@@ -13,9 +13,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Parameters
-KP = 5.0  # attractive potential gain
-ETA = 100.0  # repulsive potential gain
+KP = 1.0  # attractive potential gain
+ETA = 1000.0  # repulsive potential gain
 AREA_WIDTH = 30.0  # potential area width [m]
+DESIRED_DISTANCE = 10
+MAX_POTENTIAL = 20
 
 show_animation = True
 
@@ -36,9 +38,10 @@ def calc_potential_field(gx, gy, ox, oy, reso, rr, sx, sy):
 
         for iy in range(yw):
             y = iy * reso + miny
-            ug = calc_attractive_potential(x, y, gx, gy)
+            ug = 0  # calc_attractive_potential(x, y, gx, gy)
             uo = calc_repulsive_potential(x, y, ox, oy, rr)
-            uf = ug + uo
+            us = calc_start_repulsive_potential(x, y, sx, sy)
+            uf = ug + uo + us
             pmap[ix][iy] = uf
 
     return pmap, minx, miny
@@ -46,6 +49,13 @@ def calc_potential_field(gx, gy, ox, oy, reso, rr, sx, sy):
 
 def calc_attractive_potential(x, y, gx, gy):
     return 0.5 * KP * np.hypot(x - gx, y - gy)
+
+
+def calc_start_repulsive_potential(x, y, sx, sy):
+    d = np.hypot(x - sx, y - sy)
+    if d <= 0.1:
+        d = 0.1
+    return 0.5 * KP * (1/d)
 
 
 def calc_repulsive_potential(x, y, ox, oy, rr):
@@ -58,16 +68,30 @@ def calc_repulsive_potential(x, y, ox, oy, rr):
             dmin = d
             minid = i
 
-    # calc repulsive potential
+    # calc distance to obstacle
     dq = np.hypot(x - ox[minid], y - oy[minid])
 
-    if dq <= rr:
-        if dq <= 0.1:
-            dq = 0.1
+    # calc repulsive potential, only for points which should be in collision with robot
+    # original potential
+    # if dq <= rr:
+    #     if dq <= 0.1:
+    #         dq = 0.1
 
-        return 0.5 * ETA * (1.0 / dq - 1.0 / rr) ** 2
+    #     return 0.5 * ETA * (1.0 / dq - 1.0 / rr) ** 2
+    # else:
+    #     return 0.0
+
+    if dq <= rr:
+        p = MAX_POTENTIAL
+    elif dq <= DESIRED_DISTANCE:
+        p = 0.5 * ETA * (1.0 / dq - 1.0 / DESIRED_DISTANCE) ** 2
+    # elif dq <= 2 * DESIRED_DISTANCE:
+    #     p = 0.5 * ETA * (1.0 / dq - 1.0 / DESIRED_DISTANCE) ** 2
+    #     p *= (dq - DESIRED_DISTANCE)
     else:
-        return 0.0
+        p = 0
+
+    return min(p, MAX_POTENTIAL)
 
 
 def get_motion_model():
@@ -154,7 +178,7 @@ def potential_field_planning(sx, sy, gx, gy, ox, oy, reso, rr):
 
 def draw_heatmap(data):
     data = np.array(data).T
-    plt.pcolor(data, vmax=100.0, cmap=plt.cm.Blues)
+    plt.pcolor(data, vmax=None, cmap=plt.cm.Blues)
 
 
 def main():
@@ -167,8 +191,9 @@ def main():
     grid_size = 0.5  # potential grid size [m]
     robot_radius = 5.0  # robot radius [m]
 
-    ox = [15.0, 5.0, 20.0, 25.0]  # obstacle x position list [m]
-    oy = [25.0, 15.0, 26.0, 25.0]  # obstacle y position list [m]
+    if robot_radius > DESIRED_DISTANCE:
+        print "robot_radius > DESIRED_DISTANCE"
+        return
 
     if show_animation:
         plt.grid(True)
