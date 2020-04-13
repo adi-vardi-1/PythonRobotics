@@ -99,10 +99,10 @@ def get_motion_model():
     motion = [[1, 0],
               [0, 1],
               [-1, 0],
-              [0, -1],
-              [-1, -1],
+              #   [0, -1],
+              #   [-1, -1],
               [-1, 1],
-              [1, -1],
+              #   [1, -1],
               [1, 1]]
 
     return motion
@@ -184,16 +184,25 @@ def draw_heatmap(data):
 def main():
     print("potential_field_planning start")
 
-    sx = 0.0  # start x position [m]
-    sy = 10.0  # start y positon [m]
-    gx = 30.0  # goal x position [m]
-    gy = 30.0  # goal y position [m]
+    sx = 20.0  # start x position [m]
+    sy = 5.0  # start y positon [m]
+    gx = 10.0  # goal x position [m]
+    gy = 120.0  # goal y position [m]
     grid_size = 0.5  # potential grid size [m]
     robot_radius = 5.0  # robot radius [m]
 
     if robot_radius > DESIRED_DISTANCE:
         print "robot_radius > DESIRED_DISTANCE"
         return
+
+    # ox = [15.0, 5.0, 20.0, 25.0]  # obstacle x position list [m]
+    # oy = [25.0, 15.0, 26.0, 25.0]  # obstacle y position list [m]
+
+    oy = range(0, 40, 1)
+    oy.extend(range(60, 100, 1))
+    ox = [5] * len(oy)
+
+    # ox, oy = load_image('./map.png')
 
     if show_animation:
         plt.grid(True)
