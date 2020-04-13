@@ -21,10 +21,10 @@ show_animation = True
 
 
 def calc_potential_field(gx, gy, ox, oy, reso, rr, sx, sy):
-    minx = min(min(ox),sx,gx) - AREA_WIDTH / 2.0
-    miny = min(min(oy),sy,gy) - AREA_WIDTH / 2.0
-    maxx = max(max(ox),sx,gx) + AREA_WIDTH / 2.0
-    maxy = max(max(oy),sy,gy) + AREA_WIDTH / 2.0
+    minx = min(min(ox), sx, gx) - AREA_WIDTH / 2.0
+    miny = min(min(oy), sy, gy) - AREA_WIDTH / 2.0
+    maxx = max(max(ox), sx, gx) + AREA_WIDTH / 2.0
+    maxy = max(max(oy), sy, gy) + AREA_WIDTH / 2.0
     xw = int(round((maxx - minx) / reso))
     yw = int(round((maxy - miny) / reso))
 
@@ -100,7 +100,7 @@ def potential_field_planning(sx, sy, gx, gy, ox, oy, reso, rr):
         draw_heatmap(pmap)
         # for stopping simulation with the esc key.
         plt.gcf().canvas.mpl_connect('key_release_event',
-                lambda event: [exit(0) if event.key == 'escape' else None])
+                                     lambda event: [exit(0) if event.key == 'escape' else None])
         plt.plot(ix, iy, "*k")
         plt.plot(gix, giy, "*m")
 
