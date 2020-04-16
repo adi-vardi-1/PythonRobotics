@@ -1,5 +1,3 @@
-# from potential_field_planning import *
-
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
@@ -59,6 +57,10 @@ class PotentialFieldPlanner(object):
         print ("goal id: {} , {}".format(self.gx_id, self.gy_id))
         print ("ox id: {}".format(self.ox_id))
         print ("oy id: {}".format(self.oy_id))
+        print ("minx : {}".format(self.minx))
+        print ("miny : {}".format(self.miny))
+        print ("maxx : {}".format(self.maxx))
+        print ("miny : {}".format(self.miny))
 
     def set_motion_model(self, motion_model):
         self.motion_model = motion_model
@@ -211,7 +213,7 @@ class PotentialFieldPlanner(object):
 
         fig = plt.figure()
         plt.plot(d, p)
-        plt.ylim(-20, MAX_POTENTIAL)
+        plt.ylim(-5, MAX_POTENTIAL)
 
 def load_image(path):
     if not os.path.isfile(path):
@@ -221,21 +223,12 @@ def load_image(path):
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # if show_animation:
-    #     # Output img with window name as 'image'
-    #     cv2.imshow('image', image)
-    #     cv2.imshow('gray', gray)
-
-    #     # Maintain output window utill user presses a key
-    #     cv2.waitKey(0)
-
-    #     # Destroying present windows on screen
-    #     cv2.destroyAllWindows()
-
+    gray = np.transpose(gray)
+    gray = np.fliplr(gray)
     obstacles_indices = np.where(gray == 0)
-    ox = np.array(obstacles_indices[1])
-    oy = gray.shape[1] - 1 - np.array(obstacles_indices[0])
-    return ox, oy
+    ox = obstacles_indices[0]
+    oy = obstacles_indices[1]
+    return gray, ox, oy
 
 
 def main():
@@ -253,13 +246,10 @@ def main():
         print "robot_radius > DESIRED_DISTANCE"
         return
 
-    ox, oy = load_image('./after_thres.png')
+    grid, ox, oy = load_image('./map.png')
     if ox is None:
         print "image could not be loaded"
         return
-
-    print ox
-    print oy
 
     potential_planner = PotentialFieldPlanner()
     potential_planner.set_problem(sx, sy, gx, gy, ox, oy, resolution, False, True, True)
@@ -279,6 +269,7 @@ def main():
     potential_planner.draw_potential_profile()
 
     if show_animation:
+        fig = plt.figure()
         plt.grid(True)
         plt.axis("equal")
 
@@ -286,7 +277,7 @@ def main():
     potential_planner.calc_potential_field()
 
     # path generation
-    # _, _ = potential_planner.potential_field_planning()
+    _, _ = potential_planner.potential_field_planning()
 
     if show_animation:
         plt.show()
