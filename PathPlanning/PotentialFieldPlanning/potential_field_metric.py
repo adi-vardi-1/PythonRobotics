@@ -1,9 +1,8 @@
+from utilities import draw_heatmap, load_image
+
 import numpy as np
 import matplotlib.pyplot as plt
-import cv2
-from IPython import embed
 import time
-import os
 
 # Parameters
 AREA_WIDTH = 30.0  # potential area width [m]
@@ -17,11 +16,6 @@ MAX_OBSTACLE_DISTANCE = 50
 MAX_POTENTIAL = 5
 
 show_animation = True
-
-
-def draw_heatmap(data):
-    data = np.array(data).T
-    plt.pcolor(data, vmax=None, cmap=plt.cm.Blues)
 
 
 class PotentialFieldPlanner(object):
@@ -92,7 +86,6 @@ class PotentialFieldPlanner(object):
                 exit(0) if event.key == 'escape' else None])
             plt.plot(self.sx_id, self.sy_id, "*k")
             plt.plot(self.gx_id, self.gy_id, "*m")
-
 
         return self.potential
 
@@ -215,21 +208,6 @@ class PotentialFieldPlanner(object):
         plt.plot(d, p)
         plt.ylim(-5, MAX_POTENTIAL)
 
-def load_image(path):
-    if not os.path.isfile(path):
-        return None, None
-
-    image = cv2.imread(path)
-
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    gray = np.transpose(gray)
-    gray = np.fliplr(gray)
-    obstacles_indices = np.where(gray == 0)
-    ox = obstacles_indices[0]
-    oy = obstacles_indices[1]
-    return gray, ox, oy
-
 
 def main():
     print("potential_field_planning start")
@@ -258,10 +236,10 @@ def main():
     motion = [[1, 0],
               [0, 1],
               [-1, 0],
-            #   [0, -1],
-            #   [-1, -1],
+            # [0, -1],
+            # [-1, -1],
               [-1, 1],
-            #   [1, -1],
+            # [1, -1],
               [1, 1]]
 
     potential_planner.set_motion_model(motion)

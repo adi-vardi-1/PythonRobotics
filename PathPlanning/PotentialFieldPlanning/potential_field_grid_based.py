@@ -1,13 +1,11 @@
-from potential_field_metric import PotentialFieldPlanner, draw_heatmap, load_image
+from potential_field_metric import PotentialFieldPlanner
+from utilities import draw_heatmap
+from scenarios_params import define_scenario
 
 import numpy as np
 import scipy.ndimage
 import matplotlib.pyplot as plt
-import cv2
-from IPython import embed
 import time
-import os
-import timeit
 
 # Parameters
 # AREA_WIDTH = 0.0  # potential area width [m]
@@ -218,24 +216,15 @@ class PotentialFieldPlannerGrid(PotentialFieldPlanner):
         plt.ylim(-1, MAX_POTENTIAL+1.0)
         plt.grid()
 
+
 def main():
     print("potential_field_planning start")
 
     # define problem
-    sx = 410.0  # start x position [m]
-    sy = 100.0  # start y positon [m]
-    gx = 120.0  # goal x position [m]
-    gy = 300.0  # goal y position [m]
-    resolution = 1.0  # potential grid size [m]
-    robot_radius = 5.0  # robot radius [m]
+    sx, sy, gx, gy, grid, ox, oy, resolution = define_scenario()
 
-    if robot_radius > DESIRED_DISTANCE:
-        print "robot_radius > DESIRED_DISTANCE"
-        return False
-
-    grid, ox, oy = load_image('./curb_map.png')
     print ("grid size: {}".format(grid.shape))
-    # print grid
+    print grid
     if ox is None:
         print "image could not be loaded"
         return False
