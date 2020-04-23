@@ -140,78 +140,7 @@ class PotentialFieldPlannerGrid(PotentialFieldPlanner):
         slope = MAX_POTENTIAL / START_LIN_INFLUENCE_DISTANCE
         return np.maximum(MAX_POTENTIAL - slope * d, 0)
 
-    def plan(self):
-        self.potential_profile = []
-
-        # search path
-        d = np.hypot(self.sx - self.gx, self.sy - self.gy)
-        ix = self.sx_id
-        iy = self.sy_id
-
-        if show_animation:
-            draw_heatmap(self.potential)
-            # for stopping simulation with the esc key.
-            plt.gcf().canvas.mpl_connect('key_release_event', lambda event: [
-                exit(0) if event.key == 'escape' else None])
-            plt.plot(self.sx_id, self.sy_id, "*k")
-            plt.plot(self.gx_id, self.gy_id, "*m")
-
-        rx, ry = [self.sx], [self.sy]
-        theta = self.stheta
-        previous_id = [(None, None)] * 3
-
-        while d >= self.resolution:
-            minp = float("inf")
-            minix, miniy = -1, -1
-
-            for i, _ in enumerate(self.motion_model):
-                direction = np.arctan2(self.motion_model[i][1], self.motion_model[i][0])
-                if (direction < np.unwrap([theta - MAX_DTHETA])) or (direction > np.unwrap([theta + MAX_DTHETA])):
-                    continue
-
-                inx = int(ix + self.motion_model[i][0])
-                iny = int(iy + self.motion_model[i][1])
-                if inx >= len(self.potential) or iny >= len(self.potential[0]) or inx < 0 or iny < 0:
-                    p = float("inf")  # outside area
-                    print ("outside potential!")
-                else:
-                    p = self.potential[inx][iny]
-                if minp > p:
-                    minp = p
-                    minix = inx
-                    miniy = iny
-                    choosen_direction = direction
-            ix = minix
-            iy = miniy
-            xp = ix * self.resolution + self.minx
-            yp = iy * self.resolution + self.miny
-            theta = choosen_direction
-            d = np.hypot(self.gx - xp, self.gy - yp)
-            rx.append(xp)
-            ry.append(yp)
-            self.potential_profile.append(minp)
-
-            if ((None, None) not in previous_id and
-                    (previous_id[0] == previous_id[1] or previous_id[1] == previous_id[2]
-                        or previous_id[0] == previous_id[2])):
-                print ("Oscillation detected!!!")
-                print previous_id
-                break
-
-            # roll previous
-            previous_id[0] = previous_id[1]
-            previous_id[1] = previous_id[2]
-            previous_id[2] = (ix, iy)
-
-            if show_animation:
-                plt.plot(ix, iy, ".r")
-                plt.pause(0.001)
-
-        print("Finish!!")
-
-        return rx, ry
-
-    def plan_using_gradient(self):
+    def plan(self, use_gradient = True):
         self.potential_profile = []
 
         # search path
@@ -236,21 +165,15 @@ class PotentialFieldPlannerGrid(PotentialFieldPlanner):
         # inverse since we do gradient descent
 
         while d >= self.resolution:
-            cur_grad_x = gradient_x[ix][iy]
-            cur_grad_y = gradient_y[ix][iy]
-            grad = np.array((cur_grad_x, cur_grad_y))
-            grad = grad / np.linalg.norm(grad)
-
-            step = np.round(grad * STEP_SIZE)
-
-            # TODO add direction limit
-            ix += int(step[0])
-            iy += int(step[1])
-            minp = self.potential[ix][iy]
+            if (use_gradient):
+                ix, iy, minp, theta = self.plan_step_gradient(ix, iy, theta, gradient_x, gradient_y)
+            else:
+                ix, iy, minp, theta = self.plan_step_minimum(ix, iy, theta)
 
             xp = ix * self.resolution + self.minx
             yp = iy * self.resolution + self.miny
-            # theta = choosen_direction
+            theta = theta
+
             d = np.hypot(self.gx - xp, self.gy - yp)
 
             rx.append(xp)
@@ -276,6 +199,47 @@ class PotentialFieldPlannerGrid(PotentialFieldPlanner):
         print("Finish!!")
 
         return rx, ry
+
+    def plan_step_gradient(self, ix, iy, theta, gradient_x, gradient_y):
+        cur_grad_x = gradient_x[ix][iy]
+        cur_grad_y = gradient_y[ix][iy]
+        grad = np.array((cur_grad_x, cur_grad_y))
+        grad = grad / np.linalg.norm(grad)
+
+        step = np.round(grad * STEP_SIZE)
+
+        # TODO add direction limit
+        ix += int(step[0])
+        iy += int(step[1])
+        minp = self.potential[ix][iy]
+
+        return ix, iy, minp, theta
+
+    def plan_step_minimum(self, ix, iy, theta):
+        minp = float("inf")
+        minix, miniy = -1, -1
+
+        for i, _ in enumerate(self.motion_model):
+            direction = np.arctan2(self.motion_model[i][1], self.motion_model[i][0])
+            if (direction < np.unwrap([theta - MAX_DTHETA])) or (direction > np.unwrap([theta + MAX_DTHETA])):
+                continue
+
+            inx = int(ix + self.motion_model[i][0])
+            iny = int(iy + self.motion_model[i][1])
+            if inx >= len(self.potential) or iny >= len(self.potential[0]) or inx < 0 or iny < 0:
+                p = float("inf")  # outside area
+                print ("outside potential!")
+            else:
+                p = self.potential[inx][iny]
+            if minp > p:
+                minp = p
+                minix = inx
+                miniy = iny
+                theta = direction
+        ix = minix
+        iy = miniy
+
+        return ix, iy, minp, theta
 
     def draw_potential_profile(self, potential_function, xlim):
         d = np.linspace(0, xlim, 500)
@@ -338,14 +302,14 @@ def main():
 
     # path generation
     start = time.time()
-    rx, ry = potential_planner.plan()
+    rx, ry = potential_planner.plan(use_gradient=False)
     end = time.time()
     print ("Plan time: {} s".format((end - start)))
     print (len(rx))
     print (len(ry))
 
     start = time.time()
-    rx, ry = potential_planner.plan_using_gradient()
+    rx, ry = potential_planner.plan(use_gradient=True)
     end = time.time()
     print ("Plan (gradient) time: {} s".format((end - start)))
     print (len(rx))
