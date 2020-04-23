@@ -136,7 +136,7 @@ class PotentialFieldPlanner(object):
 
         return self.repulsive_potential(dq)
 
-    def potential_field_planning(self):
+    def plan(self):
         # search path
         d = np.hypot(self.sx - self.gx, self.sy - self.gy)
         # ix = round((sx - minx) / self.resolution)
@@ -255,7 +255,7 @@ def main():
     potential_planner.calc_potential_field()
 
     # path generation
-    _, _ = potential_planner.potential_field_planning()
+    _, _ = potential_planner.plan()
 
     if show_animation:
         plt.show()

@@ -6,9 +6,10 @@ import numpy as np
 import scipy.ndimage
 import matplotlib.pyplot as plt
 import time
+from IPython import embed
 
 # Parameters
-# AREA_WIDTH = 0.0  # potential area width [m]
+STEP_SIZE = 1.0
 START_INVERSE_KP = 1.0            # attractive potential gain
 START_LIN_INFLUENCE_DISTANCE = 200.0    # [m]
 # GOAL_INFLUENCE_DISTANCE = 200.0 # [m]
@@ -20,7 +21,7 @@ MIN_OBSTACLE_DISTANCE = 5.0
 DESIRED_DISTANCE = 10
 MAX_OBSTACLE_DISTANCE = 50
 MAX_POTENTIAL = 50
-MAX_DTHETA = 1*np.pi     # [rad]
+MAX_DTHETA = 2*np.pi     # [rad]
 
 show_animation = False
 show_result = True
@@ -80,20 +81,23 @@ class PotentialFieldPlannerGrid(PotentialFieldPlanner):
         distance_array = scipy.ndimage.distance_transform_edt(self.grid)
         # self.potential = distance_array
         if obstacle_field:
-            uo = self.repulsive_potential(distance_array)
-            self.potential += uo
+            self.pot_obs = self.repulsive_potential(distance_array)
+            self.potential += self.pot_obs
 
         if goal_field:
             dist_goal = self.calc_distance_to_index(self.grid, self.gx_id, self.gy_id)
-            self.potential += self.goal_attractive_potential(dist_goal)
+            self.pot_goal = self.goal_attractive_potential(dist_goal)
+            self.potential += self.pot_goal
 
         if start_field_inv:
             dist_start = self.calc_distance_to_index(self.grid, self.sx_id, self.sy_id)
-            self.potential += self.start_repulsive_potential_inverse(dist_start)
+            self.pot_start_inv = self.start_repulsive_potential_inverse(dist_start)
+            self.potential += self.pot_start_inv
 
         if start_field_lin:
             dist_start = self.calc_distance_to_index(self.grid, self.sx_id, self.sy_id)
-            self.potential += self.start_repulsive_potential_linear(dist_start)
+            self.pot_start_lin = self.start_repulsive_potential_linear(dist_start)
+            self.potential += self.pot_start_lin
 
         end = time.time()
         print ("Caulculate potential time: {} s".format((end - start)))
@@ -136,7 +140,7 @@ class PotentialFieldPlannerGrid(PotentialFieldPlanner):
         slope = MAX_POTENTIAL / START_LIN_INFLUENCE_DISTANCE
         return np.maximum(MAX_POTENTIAL - slope * d, 0)
 
-    def potential_field_planning(self):
+    def plan(self):
         self.potential_profile = []
 
         # search path
@@ -183,6 +187,72 @@ class PotentialFieldPlannerGrid(PotentialFieldPlanner):
             yp = iy * self.resolution + self.miny
             theta = choosen_direction
             d = np.hypot(self.gx - xp, self.gy - yp)
+            rx.append(xp)
+            ry.append(yp)
+            self.potential_profile.append(minp)
+
+            if ((None, None) not in previous_id and
+                    (previous_id[0] == previous_id[1] or previous_id[1] == previous_id[2]
+                        or previous_id[0] == previous_id[2])):
+                print ("Oscillation detected!!!")
+                print previous_id
+                break
+
+            # roll previous
+            previous_id[0] = previous_id[1]
+            previous_id[1] = previous_id[2]
+            previous_id[2] = (ix, iy)
+
+            if show_animation:
+                plt.plot(ix, iy, ".r")
+                plt.pause(0.001)
+
+        print("Finish!!")
+
+        return rx, ry
+
+    def plan_using_gradient(self):
+        self.potential_profile = []
+
+        # search path
+        d = np.hypot(self.sx - self.gx, self.sy - self.gy)
+        ix = int(self.sx_id)
+        iy = int(self.sy_id)
+
+        if show_animation:
+            draw_heatmap(self.potential)
+            # for stopping simulation with the esc key.
+            plt.gcf().canvas.mpl_connect('key_release_event', lambda event: [
+                exit(0) if event.key == 'escape' else None])
+            plt.plot(self.sx_id, self.sy_id, "*k")
+            plt.plot(self.gx_id, self.gy_id, "*m")
+
+        rx, ry = [self.sx], [self.sy]
+        theta = self.stheta
+        previous_id = [(None, None)] * 3
+
+        # calculate potential gradient
+        [gradient_x, gradient_y] = np.gradient(- self.potential)
+        # inverse since we do gradient descent
+
+        while d >= self.resolution:
+            cur_grad_x = gradient_x[ix][iy]
+            cur_grad_y = gradient_y[ix][iy]
+            grad = np.array((cur_grad_x, cur_grad_y))
+            grad = grad / np.linalg.norm(grad)
+
+            step = np.round(grad * STEP_SIZE)
+
+            # TODO add direction limit
+            ix += int(step[0])
+            iy += int(step[1])
+            minp = self.potential[ix][iy]
+
+            xp = ix * self.resolution + self.minx
+            yp = iy * self.resolution + self.miny
+            # theta = choosen_direction
+            d = np.hypot(self.gx - xp, self.gy - yp)
+
             rx.append(xp)
             ry.append(yp)
             self.potential_profile.append(minp)
@@ -267,9 +337,19 @@ def main():
                                            start_field_inv=False, start_field_lin=False)
 
     # path generation
-    rx, ry = potential_planner.potential_field_planning()
-    print len(rx)
-    print len(ry)
+    start = time.time()
+    rx, ry = potential_planner.plan()
+    end = time.time()
+    print ("Plan time: {} s".format((end - start)))
+    print (len(rx))
+    print (len(ry))
+
+    start = time.time()
+    rx, ry = potential_planner.plan_using_gradient()
+    end = time.time()
+    print ("Plan (gradient) time: {} s".format((end - start)))
+    print (len(rx))
+    print (len(ry))
 
     if show_result:
         draw_heatmap(potential_planner.potential)
