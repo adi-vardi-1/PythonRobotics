@@ -11,26 +11,26 @@ import timeit
 
 # Parameters
 # AREA_WIDTH = 0.0  # potential area width [m]
-KP = 1.0            # attractive potential gain
+START_INVERSE_KP = 1.0            # attractive potential gain
+START_LIN_INFLUENCE_DISTANCE = 200.0    # [m]
+# GOAL_INFLUENCE_DISTANCE = 200.0 # [m]
+GOAL_KP = 0.1
 ETA = 1000.0        # repulsive potential gain
 ETA2 = 500.0
 MIN_DISTANCE = 0.1
 MIN_OBSTACLE_DISTANCE = 5.0
 DESIRED_DISTANCE = 10
 MAX_OBSTACLE_DISTANCE = 50
-MAX_POTENTIAL = 5
+MAX_POTENTIAL = 50
 
 show_animation = False
 show_result = True
 
 
 class PotentialFieldPlannerGrid(PotentialFieldPlanner):
-    #override
-    def set_problem(self, grid, sx, sy, gx, gy, ox, oy, resolution, use_goal_field, use_start_field, use_obstacle_field):
+    # override
+    def set_problem(self, grid, sx, sy, gx, gy, ox, oy, resolution):
         self.grid = grid
-        self.use_goal_field = use_goal_field
-        self.use_start_field = use_start_field
-        self.use_obstacle_field = use_obstacle_field
         self.sx = sx
         self.sy = sy
         self.gx = gx
@@ -72,23 +72,28 @@ class PotentialFieldPlannerGrid(PotentialFieldPlanner):
     def set_motion_model(self, motion_model):
         self.motion_model = motion_model
 
-    def calc_potential_field(self):
+    def calc_potential_field(self, obstacle_field, goal_field, start_field_inv, start_field_lin):
         start = time.time()
         self.potential = np.zeros((self.xw, self.yw))
         print ("potential size: {}".format(self.potential.shape))
 
-        # dist = scipy.spatial.distance.cdist(a,b)
-
         distance_array = scipy.ndimage.distance_transform_edt(self.grid)
-        if self.use_obstacle_field:
+        # self.potential = distance_array
+        if obstacle_field:
             uo = self.repulsive_potential(distance_array)
             self.potential += uo
 
-        if self.use_goal_field:
-            self.potential += self.calc_attractive_potential()
+        if goal_field:
+            dist_goal = self.calc_distance_to_index(self.grid, self.gx_id, self.gy_id)
+            self.potential += self.goal_attractive_potential(dist_goal)
 
-        if self.use_start_field:
-            self.potential += self.calc_start_repulsive_potential()
+        if start_field_inv:
+            dist_start = self.calc_distance_to_index(self.grid, self.sx_id, self.sy_id)
+            self.potential += self.start_repulsive_potential_inverse(dist_start)
+
+        if start_field_lin:
+            dist_start = self.calc_distance_to_index(self.grid, self.sx_id, self.sy_id)
+            self.potential += self.start_repulsive_potential_linear(dist_start)
 
         end = time.time()
         print ("Caulculate potential time: {} s".format((end - start)))
@@ -103,6 +108,15 @@ class PotentialFieldPlannerGrid(PotentialFieldPlanner):
 
         return self.potential
 
+    def calc_distance_to_index(self, grid, ix, iy):
+        dist = np.zeros((grid.shape[0], grid.shape[1]))
+
+        for x in range(grid.shape[0]):
+            for y in range(grid.shape[1]):
+                dist[x, y] = np.hypot(x - ix, y - iy) * self.resolution
+
+        return dist
+
     def repulsive_potential(self, d):
         conds = [d <= MIN_OBSTACLE_DISTANCE, (d > MIN_OBSTACLE_DISTANCE) & (d <= MAX_OBSTACLE_DISTANCE),
                  d > MAX_OBSTACLE_DISTANCE]
@@ -110,37 +124,21 @@ class PotentialFieldPlannerGrid(PotentialFieldPlanner):
                  lambda x: 0.0]
         return np.minimum(np.piecewise(d, conds, funcs), MAX_POTENTIAL)
 
-    def calc_attractive_potential(self):
-        pot = np.zeros((self.xw, self.yw))
+    def goal_attractive_potential(self, d):
+        # influence_distance_pixels = GOAL_INFLUENCE_DISTANCE/self.resolution
+        # slope = MAX_POTENTIAL/influence_distance_pixels
+        return np.minimum(GOAL_KP * d, MAX_POTENTIAL)
 
-        for ix in range(self.xw):
-            x = ix * self.resolution + self.minx
-            for iy in range(self.yw):
-                y = iy * self.resolution + self.miny
-                pot[ix][iy] = self.attractive_potential(x, y, self.gx, self.gy)
-        return pot
+    def start_repulsive_potential_inverse(self, d):
+        return np.minimum(START_INVERSE_KP * np.reciprocal(np.maximum(d, MIN_DISTANCE)), MAX_POTENTIAL)
 
-    def attractive_potential(self, x, y, gx, gy):
-        return 0.5 * KP * np.hypot(x - gx, y - gy)
-
-    def calc_start_repulsive_potential(self):
-        pot = np.zeros((self.xw, self.yw))
-
-        for ix in range(self.xw):
-            x = ix * self.resolution + self.minx
-            for iy in range(self.yw):
-                y = iy * self.resolution + self.miny
-                pot[ix][iy] = self.start_attractive_potential(x, y, self.sx, self.sy)
-        return pot
-
-    def start_attractive_potential(self, x, y, sx, sy):
-        d = np.hypot(x - sx, y - sy)
-        if d <= MIN_DISTANCE:
-            d = MIN_DISTANCE
-        return 0.5 * KP * (d**-1)
-
+    def start_repulsive_potential_linear(self, d):
+        slope = MAX_POTENTIAL / START_LIN_INFLUENCE_DISTANCE
+        return np.maximum(MAX_POTENTIAL - slope * d, 0)
 
     def potential_field_planning(self):
+        self.potential_profile = []
+
         # search path
         d = np.hypot(self.sx - self.gx, self.sy - self.gy)
         # ix = round((sx - minx) / self.resolution)
@@ -183,6 +181,7 @@ class PotentialFieldPlannerGrid(PotentialFieldPlanner):
             d = np.hypot(self.gx - xp, self.gy - yp)
             rx.append(xp)
             ry.append(yp)
+            self.potential_profile.append(minp)
 
             if ((None, None) not in previous_id and
                     (previous_id[0] == previous_id[1] or previous_id[1] == previous_id[2]
@@ -204,13 +203,20 @@ class PotentialFieldPlannerGrid(PotentialFieldPlanner):
 
         return rx, ry
 
-    def draw_potential_profile(self):
-        d = np.linspace(0, 2*MAX_OBSTACLE_DISTANCE, 500)
-        p = np.array(map(self.repulsive_potential, d))
+    def draw_potential_profile(self, potential_function, xlim):
+        d = np.linspace(0, xlim, 500)
+        p = np.array(map(potential_function, d))
 
-        fig = plt.figure()
+        plt.figure()
         plt.plot(d, p)
-        plt.ylim(-20, MAX_POTENTIAL)
+        plt.ylim(-1, MAX_POTENTIAL+1.0)
+        plt.grid()
+
+    def draw_executed_potential_profile(self):
+        plt.figure()
+        plt.plot(self.potential_profile)
+        plt.ylim(-1, MAX_POTENTIAL+1.0)
+        plt.grid()
 
 def main():
     print("potential_field_planning start")
@@ -235,7 +241,7 @@ def main():
         return False
 
     potential_planner = PotentialFieldPlannerGrid()
-    if not potential_planner.set_problem(grid, sx, sy, gx, gy, ox, oy, resolution, False, True, True):
+    if not potential_planner.set_problem(grid, sx, sy, gx, gy, ox, oy, resolution):
         return False
 
     # dx, dy
@@ -250,15 +256,20 @@ def main():
 
     potential_planner.set_motion_model(motion)
 
-    potential_planner.draw_potential_profile()
+    # potential_planner.draw_potential_profile(potential_planner.repulsive_potential, 500)
+    # potential_planner.draw_potential_profile(potential_planner.goal_attractive_potential, 500)
+    # potential_planner.draw_potential_profile(potential_planner.start_repulsive_potential_inverse, 200)
+    # potential_planner.draw_potential_profile(potential_planner.start_repulsive_potential_linear, 300)
 
     if show_animation or show_result:
-        fig = plt.figure()
+        plt.figure()
         plt.grid(True)
         plt.axis("equal")
+        plt.grid()
 
     # calc potential field
-    potential_planner.calc_potential_field()
+    potential_planner.calc_potential_field(obstacle_field=True, goal_field=True,
+                                           start_field_inv=False, start_field_lin=True)
 
     # path generation
     rx, ry = potential_planner.potential_field_planning()
@@ -270,7 +281,11 @@ def main():
         plt.plot(potential_planner.sx_id, potential_planner.sy_id, "*k")
         plt.plot(potential_planner.gx_id, potential_planner.gy_id, "*m")
         for i in range(len(rx)):
-            plt.plot(rx[i], ry[i], ".r")
+            plt.plot(rx[i]+0.5, ry[i]+0.5, ".r")
+        # for i in range(len(ox)):
+        plt.plot(ox+0.5, oy+0.5, ".g")
+
+        # potential_planner.draw_executed_potential_profile()
 
     if show_animation or show_result:
         plt.show()
