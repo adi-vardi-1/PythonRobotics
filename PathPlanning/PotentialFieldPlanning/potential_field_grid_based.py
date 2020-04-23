@@ -20,6 +20,7 @@ MIN_OBSTACLE_DISTANCE = 5.0
 DESIRED_DISTANCE = 10
 MAX_OBSTACLE_DISTANCE = 50
 MAX_POTENTIAL = 50
+MAX_DTHETA = 1*np.pi     # [rad]
 
 show_animation = False
 show_result = True
@@ -27,10 +28,11 @@ show_result = True
 
 class PotentialFieldPlannerGrid(PotentialFieldPlanner):
     # override
-    def set_problem(self, grid, sx, sy, gx, gy, ox, oy, resolution):
+    def set_problem(self, grid, sx, sy, stheta, gx, gy, ox, oy, resolution):
         self.grid = grid
         self.sx = sx
         self.sy = sy
+        self.stheta = stheta
         self.gx = gx
         self.gy = gy
         # self.ox = ox
@@ -139,10 +141,6 @@ class PotentialFieldPlannerGrid(PotentialFieldPlanner):
 
         # search path
         d = np.hypot(self.sx - self.gx, self.sy - self.gy)
-        # ix = round((sx - minx) / self.resolution)
-        # iy = round((sy - miny) / self.resolution)
-        # gix = round((gx - minx) / self.resolution)
-        # giy = round((gy - miny) / self.resolution)
         ix = self.sx_id
         iy = self.sy_id
 
@@ -155,12 +153,18 @@ class PotentialFieldPlannerGrid(PotentialFieldPlanner):
             plt.plot(self.gx_id, self.gy_id, "*m")
 
         rx, ry = [self.sx], [self.sy]
+        theta = self.stheta
         previous_id = [(None, None)] * 3
 
         while d >= self.resolution:
             minp = float("inf")
             minix, miniy = -1, -1
+
             for i, _ in enumerate(self.motion_model):
+                direction = np.arctan2(self.motion_model[i][1], self.motion_model[i][0])
+                if (direction < np.unwrap([theta - MAX_DTHETA])) or (direction > np.unwrap([theta + MAX_DTHETA])):
+                    continue
+
                 inx = int(ix + self.motion_model[i][0])
                 iny = int(iy + self.motion_model[i][1])
                 if inx >= len(self.potential) or iny >= len(self.potential[0]) or inx < 0 or iny < 0:
@@ -172,10 +176,12 @@ class PotentialFieldPlannerGrid(PotentialFieldPlanner):
                     minp = p
                     minix = inx
                     miniy = iny
+                    choosen_direction = direction
             ix = minix
             iy = miniy
             xp = ix * self.resolution + self.minx
             yp = iy * self.resolution + self.miny
+            theta = choosen_direction
             d = np.hypot(self.gx - xp, self.gy - yp)
             rx.append(xp)
             ry.append(yp)
@@ -221,7 +227,7 @@ def main():
     print("potential_field_planning start")
 
     # define problem
-    sx, sy, gx, gy, grid, ox, oy, resolution = define_scenario()
+    sx, sy, stheta, gx, gy, grid, ox, oy, resolution = define_scenario()
 
     print ("grid size: {}".format(grid.shape))
     print grid
@@ -230,18 +236,18 @@ def main():
         return False
 
     potential_planner = PotentialFieldPlannerGrid()
-    if not potential_planner.set_problem(grid, sx, sy, gx, gy, ox, oy, resolution):
+    if not potential_planner.set_problem(grid, sx, sy, stheta, gx, gy, ox, oy, resolution):
         return False
 
     # dx, dy
     motion = [[1, 0],
+              [1, 1],
               [0, 1],
-              [-1, 0],
-              [0, -1],
-              [-1, -1],
               [-1, 1],
-              [1, -1],
-              [1, 1]]
+              [-1, 0],
+              [-1, -1],
+              [0, -1],
+              [1, -1]]
 
     potential_planner.set_motion_model(motion)
 
@@ -258,7 +264,7 @@ def main():
 
     # calc potential field
     potential_planner.calc_potential_field(obstacle_field=True, goal_field=True,
-                                           start_field_inv=False, start_field_lin=True)
+                                           start_field_inv=False, start_field_lin=False)
 
     # path generation
     rx, ry = potential_planner.potential_field_planning()

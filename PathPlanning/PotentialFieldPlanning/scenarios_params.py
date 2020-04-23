@@ -1,4 +1,5 @@
 from utilities import load_image
+import math
 
 
 def define_scenario():
@@ -12,6 +13,7 @@ def define_scenario():
     sy = 30.0  # start y positon [m]
     gx = 50.0  # goal x position [m]
     gy = 110.0  # goal y position [m]
+    stheta = 0.5*math.pi
     grid, ox, oy = load_image('./curb1.png')
     # grid, ox, oy = load_image('./curb2.png')
 
@@ -35,4 +37,4 @@ def define_scenario():
 
     resolution = 1.0  # potential grid size [m]
 
-    return sx, sy, gx, gy, grid, ox, oy, resolution
+    return sx, sy, stheta, gx, gy, grid, ox, oy, resolution
